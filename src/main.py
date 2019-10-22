@@ -22,12 +22,14 @@ class Chess:
     """
     _columns = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
     _rows = ['1', '2', '3', '4', '5', '6', '7', '8']
+    _valuations = {'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 0};
 
     def __init__(self):
         """
         Initialize the board on the starting setup for chess
         """
         self.board = {}
+        self.score = 0
 
         for col in Chess._columns:
             temp = {}
@@ -59,7 +61,7 @@ class Chess:
         self.board['f']['8'] = Piece('B', 'b', True)
 
         # Queens
-        self.board['d']['1'] = Piece('Q', 'w', True)
+        self.board['d']['1'] = Piece('Q', 'w', False)
         self.board['d']['8'] = Piece('Q', 'b', True)
 
         # Kings
@@ -67,13 +69,32 @@ class Chess:
         self.board['e']['8'] = Piece('K', 'b', True)
 
     def print(self):
+        w = 3
+        line = " " + "-- "*8 + "\n"
+        board_string = line
+        for row in Chess._rows:
+            for col in Chess._columns:
+                board_string += "|" + str(self.board[col][row])
+            board_string += "|\n" + line
+        print(board_string)
+
+    def game_score(self):
 
         for row in Chess._rows:
             for col in Chess._columns:
-                print(self.board[col][row], end=" ")
-            print(" ")
+                piece = self.board[col][row]
+                if (piece.name is not None) and (piece.state is True):
+                    if piece.color == 'w':
+                        self.score += Chess._valuations[piece.name]
+                    elif piece.color == 'b':
+                        self.score -= Chess._valuations[piece.name]
+
+
+
 
 
 c = Chess()
 # print(c.board['f']['5'])
 c.print()
+c.game_score()
+print(c.score)
