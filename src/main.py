@@ -5,10 +5,11 @@ class Piece:
     Class for objects that are in the board
     """
 
-    def __init__(self, name=None, color=None, state=None):
+    def __init__(self, name=None, color=None, state=None, position=None):
         self.name = name
         self.color = color
         self.state = state
+        self.position = position
 
     def __str__(self):
         if (self.name is not None) and (self.color is not None):
@@ -16,85 +17,101 @@ class Piece:
         else:
             return '  '
 
+    def __repr__(self):
+        return [self.name, self.color, self.state, self.position]
+
+
 class Chess:
     """
     Class for all game management
     """
-    _columns = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
-    _rows = ['1', '2', '3', '4', '5', '6', '7', '8']
-    _valuations = {'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 0};
+    _files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    _ranks = ['1', '2', '3', '4', '5', '6', '7', '8']
+    _valuations = {'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 0}
 
     def __init__(self):
         """
         Initialize the board on the starting setup for chess
         """
-        self.board = {}
+        self.active = []
+        self.dead = []
         self.score = 0
-
-        for col in Chess._columns:
-            temp = {}
-            for row in Chess._rows:
-                temp[row] = Piece()
-            self.board[col] = temp
+        self.board = [["" for _ in range(8)] for __ in range(8)]
 
         # Pawns
-        for col in Chess._columns:
-            self.board[col]['2'] = Piece('P', 'w', True)
-            self.board[col]['7'] = Piece('P', 'b', True)
+        for file in Chess._files:
+            self.active.append(Piece('P', 'w', True, file + '2'))
+            self.active.append(Piece('P', 'b', True, file + '7'))
 
         # Rooks
-        self.board['a']['1'] = Piece('R', 'w', True)
-        self.board['h']['1'] = Piece('R', 'w', True)
-        self.board['a']['8'] = Piece('R', 'b', True)
-        self.board['h']['8'] = Piece('R', 'b', True)
+        self.active.append(Piece('R', 'w', True, 'a1'))
+        self.active.append(Piece('R', 'w', True, 'h1'))
+        self.active.append(Piece('R', 'b', True, 'a8'))
+        self.active.append(Piece('R', 'b', True, 'h8'))
 
         # Knights
-        self.board['b']['1'] = Piece('N', 'w', True)
-        self.board['g']['1'] = Piece('N', 'w', True)
-        self.board['b']['8'] = Piece('N', 'b', True)
-        self.board['g']['8'] = Piece('N', 'b', True)
+        self.active.append(Piece('N', 'w', True, 'b1'))
+        self.active.append(Piece('N', 'w', True, 'g1'))
+        self.active.append(Piece('N', 'b', True, 'b8'))
+        self.active.append(Piece('N', 'b', True, 'g8'))
 
         # Bishops
-        self.board['c']['1'] = Piece('B', 'w', True)
-        self.board['f']['1'] = Piece('B', 'w', True)
-        self.board['c']['8'] = Piece('B', 'b', True)
-        self.board['f']['8'] = Piece('B', 'b', True)
+        self.active.append(Piece('B', 'w', True, 'c1'))
+        self.active.append(Piece('B', 'w', True, 'f1'))
+        self.active.append(Piece('B', 'b', True, 'c8'))
+        self.active.append(Piece('B', 'b', True, 'f8'))
 
         # Queens
-        self.board['d']['1'] = Piece('Q', 'w', False)
-        self.board['d']['8'] = Piece('Q', 'b', True)
+        self.active.append(Piece('Q', 'w', True, 'd1'))
+        self.active.append(Piece('Q', 'b', True, 'd8'))
 
         # Kings
-        self.board['e']['1'] = Piece('K', 'w', True)
-        self.board['e']['8'] = Piece('K', 'b', True)
+        self.active.append(Piece('K', 'w', True, 'e1'))
+        self.active.append(Piece('K', 'b', True, 'e8'))
 
     def print(self):
-        w = 3
-        line = " " + "-- "*8 + "\n"
+        """
+        Primitive print of the board to console
+        :return:
+        """
+        for piece in self.active:
+            col = ord(piece.position[0]) - ord('a')
+            row = int(piece.position[1]) - 1
+            self.board[row][col] = piece.name + piece.color
+
+        line = " " + "-- " * 8 + "\n"
         board_string = line
-        for row in Chess._rows:
-            for col in Chess._columns:
-                board_string += "|" + str(self.board[col][row])
+        for r in range(8):
+            for c in range(8):
+                if self.board[r][c] != "":
+                    board_string += "|" + self.board[r][c]
+                else:
+                    board_string += "|" + "  "
             board_string += "|\n" + line
+
         print(board_string)
 
     def game_score(self):
+        """
+        Compute game score with 1/3/3/5/9/0 scoring
+        :return:
+        score: signed integer
+        """
+        for piece in self.active:
+            if piece.state:
+                if piece.color == 'w':
+                    self.score += Chess._valuations[piece.name]
+                elif piece.color == 'b':
+                    self.score -= Chess._valuations[piece.name]
+        return self.score
 
-        for row in Chess._rows:
-            for col in Chess._columns:
-                piece = self.board[col][row]
-                if (piece.name is not None) and (piece.state is True):
-                    if piece.color == 'w':
-                        self.score += Chess._valuations[piece.name]
-                    elif piece.color == 'b':
-                        self.score -= Chess._valuations[piece.name]
-
-
-
+    # def move(self, entry=None):
+    #     # Rooks
+    #     if entry[0] == 'R':
+    #         if len(entry) == 2:
 
 
 c = Chess()
 # print(c.board['f']['5'])
 c.print()
-c.game_score()
-print(c.score)
+print(c.game_score())
