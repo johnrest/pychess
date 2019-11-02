@@ -25,6 +25,15 @@ class Square:
     def __eq__(self, other):
         return (self.file == other.file) and (self.rank == other.rank)
 
+    def to_int_grid(self):
+        """
+        Translate the square to a grid of integers with the lower corner as (0,0)
+        :return: tuple (x, y)
+        """
+        x = ord(self.file) - ord(FILES[0])
+        y = ord(self.rank) - ord(RANKS[0])
+        return x, y
+
 
 class Piece:
     """
@@ -55,7 +64,7 @@ class Piece:
         :return: List of Positions objects
         """
         # Rooks
-        types = {'R': Piece.valid_rook}
+        types = {'R': Piece.valid_rook, 'B': Piece.valid_bishop, 'N': Piece.valid_knight}
 
         def select_function(function, piece):
             return function(piece)
@@ -67,8 +76,36 @@ class Piece:
     def valid_rook(square):
         horizontal = {file + square.rank for file in FILES}
         vertical = {square.file + rank for rank in RANKS}
-        coordinates = sorted(horizontal ^ vertical)                 # symmetric difference
+        coordinates = sorted(horizontal ^ vertical)  # symmetric difference
         return [Square(coord) for coord in coordinates]
+
+    @staticmethod
+    def valid_bishop(square):
+        x1, y1 = square.to_int_grid()
+        pos_diagonal_num = [(x, x - x1 + y1) for x in range(8) if (-1 < x - x1 + y1 < 8)]
+        neg_diagonal_num = [(x, -x + x1 + y1) for x in range(8) if (-1 < -x + x1 + y1 < 8)]
+
+        pos_diagonal = {chr(p[0] + ord(FILES[0])) + chr(p[1] + ord(RANKS[0])) for p in pos_diagonal_num}
+        neg_diagonal = {chr(n[0] + ord(FILES[0])) + chr(n[1] + ord(RANKS[0])) for n in neg_diagonal_num}
+
+        coordinates = sorted(pos_diagonal ^ neg_diagonal)  # symmetric difference
+
+        return [Square(coord) for coord in coordinates]
+
+    @staticmethod
+    def valid_knight(square):
+        x1, y1 = square.to_int_grid()
+
+        # Hard coding of the possible L movements of a knight
+        pos_xy = []
+        for x, y in zip([2, 2, -2, -2, 1, 1, -1, -1], [1, -1, 1, -1, 2, -2, 2, -2]):
+            if (-1 < x1 + x < 8) and (-1 < y1 + y < 8):     # Select for within the board
+                pos_xy.append((x1 + x, y1 + y))
+
+        coordinates = [chr(p[0] + ord(FILES[0])) + chr(p[1] + ord(RANKS[0])) for p in pos_xy]
+
+        return [Square(coord) for coord in coordinates]
+
 
 class Chess:
     """
@@ -120,7 +157,7 @@ class Chess:
             self.active_black.append(Piece('K', 'b', True, Square('e8')))
 
         elif setup.lower() == "simple":
-            self.active_white.append(Piece('R', 'w', True, 'f7'))
+            self.active_white.append(Piece('N', 'w', True, 'e4'))
             self.active_white, self.dead_white = Chess.check_active(self.active_white, self.dead_white)
 
     def print(self):
@@ -147,7 +184,6 @@ class Chess:
             board_string += "|\n" + line
 
         print(board_string)
-
 
     def print_valid(self, square):
         """
@@ -189,7 +225,6 @@ class Chess:
             board_string += "|\n" + line
 
         print(board_string)
-
 
     def game_score(self):
         """
@@ -331,4 +366,4 @@ c = Chess("simple")
 # print(c.board['f']['5'])
 c.print()
 
-c.print_valid(Square("f7"))
+c.print_valid(Square("e4"))
