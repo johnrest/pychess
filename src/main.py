@@ -20,7 +20,7 @@ class Square:
         return self.file + self.rank
 
     def __repr__(self):
-        return " ".join([self.file, self.rank])
+        return "".join([self.file, self.rank])
 
     def __eq__(self, other):
         return (self.file == other.file) and (self.rank == other.rank)
@@ -63,24 +63,26 @@ class Piece:
         Compute all valid squares for the current piece as if it were alone in the board.
         :return: List of Positions objects
         """
-        # Rooks
-        types = {'R': Piece.valid_rook, 'B': Piece.valid_bishop, 'N': Piece.valid_knight}
+        types = {'R': Piece.valid_rook, 'B': Piece.valid_bishop, 'N': Piece.valid_knight,
+                 'Q': Piece.valid_queen, 'K': Piece.valid_king, 'P': Piece.valid_pawn}
 
         def select_function(function, piece):
             return function(piece)
 
-        squares = select_function(types.get(self.name), self.square)
+        squares = select_function(types.get(self.name), self)
         return squares
 
     @staticmethod
-    def valid_rook(square):
+    def valid_rook(piece):
+        square = piece.square
         horizontal = {file + square.rank for file in FILES}
         vertical = {square.file + rank for rank in RANKS}
         coordinates = sorted(horizontal ^ vertical)  # symmetric difference
         return [Square(coord) for coord in coordinates]
 
     @staticmethod
-    def valid_bishop(square):
+    def valid_bishop(piece):
+        square = piece.square
         x1, y1 = square.to_int_grid()
         pos_diagonal_num = [(x, x - x1 + y1) for x in range(8) if (-1 < x - x1 + y1 < 8)]
         neg_diagonal_num = [(x, -x + x1 + y1) for x in range(8) if (-1 < -x + x1 + y1 < 8)]
@@ -93,16 +95,51 @@ class Piece:
         return [Square(coord) for coord in coordinates]
 
     @staticmethod
-    def valid_knight(square):
+    def valid_knight(piece):
+        square = piece.square
         x1, y1 = square.to_int_grid()
 
         # Hard coding of the possible L movements of a knight
         pos_xy = []
         for x, y in zip([2, 2, -2, -2, 1, 1, -1, -1], [1, -1, 1, -1, 2, -2, 2, -2]):
-            if (-1 < x1 + x < 8) and (-1 < y1 + y < 8):     # Select for within the board
+            if (-1 < x1 + x < 8) and (-1 < y1 + y < 8):  # Select for within the board
                 pos_xy.append((x1 + x, y1 + y))
 
         coordinates = [chr(p[0] + ord(FILES[0])) + chr(p[1] + ord(RANKS[0])) for p in pos_xy]
+
+        return [Square(coord) for coord in coordinates]
+
+    @staticmethod
+    def valid_queen(piece):
+        return Piece.valid_rook(piece) + Piece.valid_bishop(piece)
+
+    @staticmethod
+    def valid_king(piece):
+        square = piece.square
+        x1, y1 = square.to_int_grid()
+
+        pos_xy = []
+        for x, y in zip([-1, -1, -1, 0, 0, 1, 1, 1], [1, 0, -1, 1, -1, 1, 0, -1]):  # hard code all valid moves
+            if (-1 < x1 + x < 8) and (-1 < y1 + y < 8):  # Select for within the board
+                pos_xy.append((x1 + x, y1 + y))
+
+        coordinates = [chr(p[0] + ord(FILES[0])) + chr(p[1] + ord(RANKS[0])) for p in pos_xy]
+
+        return [Square(coord) for coord in coordinates]
+
+    @staticmethod
+    def valid_pawn(piece):
+        square = piece.square
+        color = piece.color
+        x1, y1 = square.to_int_grid()
+
+        steps = 2 if square.rank in ['2', '7'] else 1  # Starting pawns can jump 1 or 2 squares
+
+        direction = +1 if color == 'w' else -1  # Black pawns move downwards, white pawns move upwards
+
+        pos_y = [y1 + direction * (step + 1) for step in range(steps) if (0 < y1 + direction * (step + 1) < 8)]
+
+        coordinates = [square.file + chr(p + ord(RANKS[0])) for p in pos_y]
 
         return [Square(coord) for coord in coordinates]
 
@@ -157,7 +194,9 @@ class Chess:
             self.active_black.append(Piece('K', 'b', True, Square('e8')))
 
         elif setup.lower() == "simple":
-            self.active_white.append(Piece('N', 'w', True, 'e4'))
+            self.active_white.append(Piece('P', 'b', True, 'a6'))
+
+            # TODO: verify that two pieces can not be in the same square
             self.active_white, self.dead_white = Chess.check_active(self.active_white, self.dead_white)
 
     def print(self):
@@ -244,40 +283,41 @@ class Chess:
     def set_current_player(self, new_player):
         self.current_player = new_player
 
-    # def parse_move(self, entry):
-    #     """
-    #     Transform the chess move from regular notation to a tuple having the
-    #     initial and last positions. Check for validity of notation.
-    #     :param entry: string with move
-    #     :return: Tuple with Position objects (old, new)
-    #     """
-    #
-    #     # Detect if move has correct notation
-    #     assert(1 < len(entry) < 6, "Move has incorrect length of characters")
-    #
-    #     # Obtain active player pieces
-    #     if self.current_player == 'w':
-    #         current_active = self.active_white
-    #     else:
-    #         current_active = self.active_black
-    #
-    #     #   Detect what type of piece is moving
-    #     if (entry[0] in Chess.FILES) and (len(entry) == 2):        # Simple pawn move
-    #         old = Square(entry[0] + chr(ord(entry[1])-1))
-    #         new = Square(entry)
-    #     elif (entry[0] in Chess._valuations.keys()) and (len(entry) == 3):      #Simple mayor piece move
-    #         selected_pieces = [piece for piece in current_active if piece.name == entry[0]]
-    #
-    #
-    #     # Detect location of piece
-    #
-    #     # Detect if move is legal
-    #     # Translate to tuple of Positions
-    #
-    #     return (old, new)
+    def parse_move(self, entry):
+        """
+        Transform the chess move from notation "Pa4->a5" to a tuple having the
+        initial and last positions. Check for validity of notation.
+        :param entry: string with move
+        :return: Tuple with Square objects (current, future)
+        """
+
+        # Detect if move has correct notation
+        assert len(entry) == 7, "Move has incorrect length of characters"
+
+        name = entry[0]
+        current_square = Square(entry[1:3])  # Relevant part of the string
+        future_square = Square(entry[5:7])  # Relevant part of the string
+
+        # Obtain active player pieces
+        if self.current_player == 'w':
+            active = self.active_white
+        else:
+            active = self.active_black
+
+        # Evaluate if piece exists on the current square
+        flag = False
+        for piece in active:
+            if (piece.square == current_square) and (piece.name == name):
+                flag = True         # Found one correct piece
+
+        if not flag:
+            print("Move is invalid, try again.")        # No active pieces match the entry
+
+        return current_square, future_square
 
     # def move(self, entry):
-    #     current_active = []
+    #
+    # current_active = []
     #     if self.current_player == 'w':
     #         current_active = self.active_white
     #     elif self.current_player == 'b':
@@ -365,5 +405,7 @@ class Chess:
 c = Chess("simple")
 # print(c.board['f']['5'])
 c.print()
+print(c.parse_move("Pa7->a6"))
+# print(len("Pa6->h8"))
 
-c.print_valid(Square("e4"))
+# c.print_valid(Square("a6"))
