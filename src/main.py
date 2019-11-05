@@ -1,5 +1,5 @@
 # Pychess
-
+from collections import Counter
 
 # Global variables
 FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
@@ -25,6 +25,9 @@ class Square:
     def __eq__(self, other):
         return (self.file == other.file) and (self.rank == other.rank)
 
+    def __hash__(self):
+        return hash(repr(self))
+
     def to_int_grid(self):
         """
         Translate the square to a grid of integers with the lower corner as (0,0)
@@ -39,7 +42,7 @@ class Piece:
     """
     Class for objects that are in the board
     """
-
+    # TODO: verify that color, state and name are valid
     def __init__(self, name=None, color=None, state=None, square=None):
         self.name = name
         self.color = color
@@ -55,7 +58,7 @@ class Piece:
     def __repr__(self):
         return " ".join([self.name, self.color, str(self.state), str(self.square)])
 
-    def change_position(self, new_square):
+    def change_square(self, new_square):
         self.square = new_square
 
     def valid_squares(self):
@@ -150,7 +153,7 @@ class Chess:
     """
     _valuations = {'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 0}
 
-    def __init__(self, setup):
+    def __init__(self, setup=""):
         """
         Initialize the board on the starting setup for chess
         """
@@ -161,7 +164,7 @@ class Chess:
         self.dead_black = []
         self.score = 0
 
-        if setup.lower() == 'default':
+        if setup.lower() == 'default':              # Full chess game
             # Pawns
             for file in FILES:
                 self.active_white.append(Piece('P', 'w', True, Square(file + '2')))
@@ -193,11 +196,21 @@ class Chess:
             self.active_white.append(Piece('K', 'w', True, Square('e1')))
             self.active_black.append(Piece('K', 'b', True, Square('e8')))
 
-        elif setup.lower() == "simple":
-            self.active_white.append(Piece('P', 'b', True, 'a6'))
+    def add_piece(self, piece):
+        """
+        Add a piece to the board
+        :param piece: Piece object
+        :return: None
+        """
+        if piece.color == "w":
+            self.active_white.append(piece)
+        else:
+            self.active_black.append(piece)
 
-            # TODO: verify that two pieces can not be in the same square
-            self.active_white, self.dead_white = Chess.check_active(self.active_white, self.dead_white)
+        self.active_white, self.dead_white = Chess.check_active(self.active_white, self.dead_white)
+        self.active_black, self.dead_black = Chess.check_active(self.active_black, self.dead_black)
+
+        assert self._test_valid_active(), "Invalid pieces"
 
     def print(self):
         """
@@ -308,12 +321,32 @@ class Chess:
         flag = False
         for piece in active:
             if (piece.square == current_square) and (piece.name == name):
-                flag = True         # Found one correct piece
+                flag = True  # Found one correct piece
 
         if not flag:
-            print("Move is invalid, try again.")        # No active pieces match the entry
+            print("Move is invalid, try again.")  # No active pieces match the entry
+        else:
+            return current_square, future_square
 
-        return current_square, future_square
+    def move(self, entry):
+
+        current_square, future_square = self.parse_move(entry)
+
+        # Obtain active player pieces
+        # TODO: write function to obtain active pieces of current player, to avoid repeating the following code
+        if self.current_player == 'w':
+            active = self.active_white
+        else:
+            active = self.active_black
+
+        [current_piece] = [piece for piece in active if piece.square == current_square]
+
+        valid = current_piece.valid_squares()
+
+        if future_square in valid:
+            current_piece.change_square(future_square)
+        else:
+            print("Move is invalid!")
 
     # def move(self, entry):
     #
@@ -401,11 +434,33 @@ class Chess:
                 new_active.append(piece)
         return new_active, dead
 
+    def _test_valid_active(self):
+        """
+        Test that no two valid pieces have the same square
+        :return: True or False
+        """
+        all_active = self.active_white + self.active_black
+        all_squares = [piece.square for piece in all_active]
+
+        counts = Counter(all_squares)
+
+        flag = True
+
+        for key, val in counts.items():
+            if val > 1:
+                print("Square {} is occupied more than once".format(key))
+                flag = False
+
+        return flag
+
 
 c = Chess("simple")
 # print(c.board['f']['5'])
+c.add_piece(Piece("N", "w", True, 'e5'))
 c.print()
-print(c.parse_move("Pa7->a6"))
-# print(len("Pa6->h8"))
-
-# c.print_valid(Square("a6"))
+print(c.move("Ne5->b8"))
+print(c.move("Nb8->a7"))
+print(c.move("Na7->g1"))
+print(c.move("Ng1->h2"))
+print(c.move("Nh2->e5"))
+c.print()
