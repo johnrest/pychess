@@ -1,5 +1,6 @@
 # Pychess
 from collections import Counter
+import sys
 
 # Global variables
 FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
@@ -42,6 +43,7 @@ class Piece:
     """
     Class for objects that are in the board
     """
+
     # TODO: verify that color, state and name are valid
     def __init__(self, name=None, color=None, state=None, square=None):
         self.name = name
@@ -153,48 +155,48 @@ class Chess:
     """
     _valuations = {'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 0}
 
-    def __init__(self, setup=""):
+    def __init__(self, current_player="w", setup=""):
         """
         Initialize the board on the starting setup for chess
         """
-        self.current_player = 'w'
+        self.current_player = current_player
         self.active_white = []
         self.active_black = []
         self.dead_white = []
         self.dead_black = []
         self.score = 0
 
-        if setup.lower() == 'default':              # Full chess game
+        if setup.lower() == 'default':  # Full chess game
             # Pawns
             for file in FILES:
-                self.active_white.append(Piece('P', 'w', True, Square(file + '2')))
-                self.active_black.append(Piece('P', 'b', True, Square(file + '7')))
+                self.active_white.append(Piece('P', 'w', True, file + '2'))
+                self.active_black.append(Piece('P', 'b', True, file + '7'))
 
             # Rooks
-            self.active_white.append(Piece('R', 'w', True, Square('a1')))
-            self.active_white.append(Piece('R', 'w', True, Square('h1')))
-            self.active_black.append(Piece('R', 'b', True, Square('a8')))
-            self.active_black.append(Piece('R', 'b', True, Square('h8')))
+            self.active_white.append(Piece('R', 'w', True, 'a1'))
+            self.active_white.append(Piece('R', 'w', True, 'h1'))
+            self.active_black.append(Piece('R', 'b', True, 'a8'))
+            self.active_black.append(Piece('R', 'b', True, 'h8'))
 
             # Knights
-            self.active_white.append(Piece('N', 'w', True, Square('b1')))
-            self.active_white.append(Piece('N', 'w', True, Square('g1')))
-            self.active_black.append(Piece('N', 'b', True, Square('b8')))
-            self.active_black.append(Piece('N', 'b', True, Square('g8')))
+            self.active_white.append(Piece('N', 'w', True, 'b1'))
+            self.active_white.append(Piece('N', 'w', True, 'g1'))
+            self.active_black.append(Piece('N', 'b', True, 'b8'))
+            self.active_black.append(Piece('N', 'b', True, 'g8'))
 
             # Bishops
-            self.active_white.append(Piece('B', 'w', True, Square('c1')))
-            self.active_white.append(Piece('B', 'w', True, Square('f1')))
-            self.active_black.append(Piece('B', 'b', True, Square('c8')))
-            self.active_black.append(Piece('B', 'b', True, Square('f8')))
+            self.active_white.append(Piece('B', 'w', True, 'c1'))
+            self.active_white.append(Piece('B', 'w', True, 'f1'))
+            self.active_black.append(Piece('B', 'b', True, 'c8'))
+            self.active_black.append(Piece('B', 'b', True, 'f8'))
 
             # Queens
-            self.active_white.append(Piece('Q', 'w', True, Square('d1')))
-            self.active_black.append(Piece('Q', 'b', True, Square('d8')))
+            self.active_white.append(Piece('Q', 'w', True, 'd1'))
+            self.active_black.append(Piece('Q', 'b', True, 'd8'))
 
             # Kings
-            self.active_white.append(Piece('K', 'w', True, Square('e1')))
-            self.active_black.append(Piece('K', 'b', True, Square('e8')))
+            self.active_white.append(Piece('K', 'w', True, 'e1'))
+            self.active_black.append(Piece('K', 'b', True, 'e8'))
 
     def add_piece(self, piece):
         """
@@ -293,8 +295,13 @@ class Chess:
                     self.score -= Chess._valuations[piece.name]
         return self.score
 
-    def set_current_player(self, new_player):
-        self.current_player = new_player
+    def switch_current_player(self):
+        if self.current_player == "w":
+            self.current_player = "b"
+            return
+        elif self.current_player == "b":
+            self.current_player = "w"
+            return
 
     def parse_move(self, entry):
         """
@@ -312,10 +319,7 @@ class Chess:
         future_square = Square(entry[5:7])  # Relevant part of the string
 
         # Obtain active player pieces
-        if self.current_player == 'w':
-            active = self.active_white
-        else:
-            active = self.active_black
+        active = self.get_active(self.current_player)
 
         # Evaluate if piece exists on the current square
         flag = False
@@ -323,21 +327,16 @@ class Chess:
             if (piece.square == current_square) and (piece.name == name):
                 flag = True  # Found one correct piece
 
-        if not flag:
-            print("Move is invalid, try again.")  # No active pieces match the entry
-        else:
-            return current_square, future_square
+        assert flag, "Move is invalid. No active pieces match the entry"
+
+        return current_square, future_square
 
     def move(self, entry):
 
         current_square, future_square = self.parse_move(entry)
 
         # Obtain active player pieces
-        # TODO: write function to obtain active pieces of current player, to avoid repeating the following code
-        if self.current_player == 'w':
-            active = self.active_white
-        else:
-            active = self.active_black
+        active = self.get_active(self.current_player)
 
         [current_piece] = [piece for piece in active if piece.square == current_square]
 
@@ -347,6 +346,13 @@ class Chess:
             current_piece.change_square(future_square)
         else:
             print("Move is invalid!")
+
+        self.active_white, self.dead_white = Chess.check_active(self.active_white, self.dead_white)
+        self.active_black, self.dead_black = Chess.check_active(self.active_black, self.dead_black)
+
+        assert self._test_valid_active(), "Invalid pieces"
+
+        self.switch_current_player()
 
     # def move(self, entry):
     #
@@ -424,16 +430,6 @@ class Chess:
     #     print("Invalid position!")
     #     exit()
 
-    @staticmethod
-    def check_active(active, dead):
-        new_active = []
-        for piece in active:
-            if not piece.state:
-                dead.append(piece)
-            else:
-                new_active.append(piece)
-        return new_active, dead
-
     def _test_valid_active(self):
         """
         Test that no two valid pieces have the same square
@@ -448,19 +444,39 @@ class Chess:
 
         for key, val in counts.items():
             if val > 1:
-                print("Square {} is occupied more than once".format(key))
+                print("ERROR: Square {} is occupied more than once".format(key), file=sys.stderr)
                 flag = False
-
         return flag
 
+    def get_active(self, color):
+        if color == "w":
+            active = self.active_white
+        else:
+            active = self.active_black
+        return active
 
-c = Chess("simple")
+    @staticmethod
+    def check_active(active, dead):
+        new_active = []
+        for piece in active:
+            if not piece.state:
+                dead.append(piece)
+            else:
+                new_active.append(piece)
+        return new_active, dead
+
+
+# c = Chess(setup = "default")
+c = Chess()
 # print(c.board['f']['5'])
-c.add_piece(Piece("N", "w", True, 'e5'))
-c.print()
-print(c.move("Ne5->b8"))
-print(c.move("Nb8->a7"))
-print(c.move("Na7->g1"))
-print(c.move("Ng1->h2"))
-print(c.move("Nh2->e5"))
+# c.add_piece(Piece("B", "w", True, 'f1'))
+# c.print_valid(Square('f1'))
+# c.add_piece(Piece("Q", "b", True, 'd8'))
+# c.add_piece(Piece("P", "w", True, 'a2'))
+# c.print()
+# c.move("Ne5->d3")
+# c.move("Qd8->d1")
+# c.move("Nd3->c5")
+# c.move("Qd1->d3")
+# c.move("Pa2->a4")
 c.print()
