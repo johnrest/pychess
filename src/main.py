@@ -29,6 +29,9 @@ class Square:
     def __hash__(self):
         return hash(repr(self))
 
+    def __lt__(self, other):
+        return self.file + self.rank < other.file + other.rank
+
     def to_int_grid(self):
         """
         Translate the square to a grid of integers with the lower corner as (0,0)
@@ -78,12 +81,51 @@ class Piece:
         return squares
 
     @staticmethod
+    def sort_valid_squares(square, valid, valid_sorted):
+        """
+        Sort the valid squares according to their distance to the piece square.
+        The sorting facilitates to filter the valid moves with respect to other pieces,
+        yet this is done inside the Chess class.
+        :param square: current square
+        :param valid: list of all valid squares
+        :param valid_sorted: Dictionary with the keys expected to be computed, and empty value lists to populate
+                e.g.: For a rook, directions are (1,0), (0,1), (-1,0), (0,-1)
+        :return: Dictionary with keys describing the direction of the valid squares,
+                and values as correspondingly sorted lists
+        """
+
+        x1, y1 = square.to_int_grid()
+        for v in valid:
+            x, y = v.to_int_grid()
+            dx = int((x - x1) / abs(x - x1)) if abs(x - x1) > 0 else 0
+            dy = int((y - y1) / abs(y - y1)) if abs(y - y1) > 0 else 0
+            valid_sorted[(dx, dy)].append(v)                    # Populate dictionary
+
+        # Sort valid squares with respect to the current square
+        for direction, valid in valid_sorted.items():
+            if direction[0] < 0:                                # "negative directions" have inverse sorting
+                reverse = True
+            elif (direction[0] == 0) and (direction[1] < 0):    # "negative directions" have inverse sorting
+                reverse = True
+            else:
+                reverse = False
+
+            valid_sorted[direction] = sorted(valid_sorted[direction], reverse=reverse)
+
+
+    @staticmethod
     def valid_rook(piece):
         square = piece.square
         horizontal = {file + square.rank for file in FILES}
         vertical = {square.file + rank for rank in RANKS}
         coordinates = sorted(horizontal ^ vertical)  # symmetric difference
-        return [Square(coord) for coord in coordinates]
+        valid = [Square(coord) for coord in coordinates]
+
+        valid_sorted = {(1, 0): [], (0, 1): [], (-1, 0): [], (0, -1): []}
+
+        Piece.sort_valid_squares(square, valid, valid_sorted)
+
+        return valid_sorted
 
     @staticmethod
     def valid_bishop(piece):
@@ -97,7 +139,13 @@ class Piece:
 
         coordinates = sorted(pos_diagonal ^ neg_diagonal)  # symmetric difference
 
-        return [Square(coord) for coord in coordinates]
+        valid = [Square(coord) for coord in coordinates]
+
+        valid_sorted = {(1, 1): [], (-1, 1): [], (-1, -1): [], (1, -1): []}
+
+        Piece.sort_valid_squares(square, valid, valid_sorted)
+
+        return valid_sorted
 
     @staticmethod
     def valid_knight(piece):
@@ -112,11 +160,15 @@ class Piece:
 
         coordinates = [chr(p[0] + ord(FILES[0])) + chr(p[1] + ord(RANKS[0])) for p in pos_xy]
 
-        return [Square(coord) for coord in coordinates]
+        valid = [Square(coord) for coord in coordinates]
+
+        valid_sorted = {(0, 0): valid}               # Knight moves are not sorted
+
+        return valid_sorted
 
     @staticmethod
     def valid_queen(piece):
-        return Piece.valid_rook(piece) + Piece.valid_bishop(piece)
+        return {**Piece.valid_rook(piece), **Piece.valid_bishop(piece)}
 
     @staticmethod
     def valid_king(piece):
@@ -130,7 +182,14 @@ class Piece:
 
         coordinates = [chr(p[0] + ord(FILES[0])) + chr(p[1] + ord(RANKS[0])) for p in pos_xy]
 
-        return [Square(coord) for coord in coordinates]
+        valid = [Square(coord) for coord in coordinates]
+
+        valid_sorted = {(1, 1): [], (-1, 1): [], (-1, -1): [], (1, -1): [],
+                        (1, 0): [], (0, 1): [], (-1, 0): [], (0, -1): []}
+
+        Piece.sort_valid_squares(square, valid, valid_sorted)
+
+        return valid_sorted
 
     @staticmethod
     def valid_pawn(piece):
@@ -142,11 +201,17 @@ class Piece:
 
         direction = +1 if color == 'w' else -1  # Black pawns move downwards, white pawns move upwards
 
-        pos_y = [y1 + direction * (step + 1) for step in range(steps) if (0 < y1 + direction * (step + 1) < 8)]
+        pos_y = [y1 + direction * (step + 1) for step in range(steps) if (-1 < y1 + direction * (step + 1) < 8)]
 
         coordinates = [square.file + chr(p + ord(RANKS[0])) for p in pos_y]
 
-        return [Square(coord) for coord in coordinates]
+        valid = [Square(coord) for coord in coordinates]
+
+        valid_sorted = {(0, direction): []}
+
+        Piece.sort_valid_squares(square, valid, valid_sorted)
+
+        return valid_sorted
 
 
 class Chess:
@@ -263,10 +328,12 @@ class Chess:
             row = int(piece.square.rank) - 1
             board[row][col] = piece.name + piece.color
 
-        for square in selected_piece.valid_squares():
-            col = ord(square.file) - ord('a')
-            row = int(square.rank) - 1
-            board[row][col] = "++"
+        for _, valid in selected_piece.valid_squares().items():
+            for sq in valid:
+                col, row = sq.to_int_grid()
+                # col = ord(sq.file) - ord('a')
+                # row = int(sq.rank) - 1
+                board[row][col] = "++"
 
         line = " " + "-- " * 8 + "\n"
         board_string = line
@@ -468,8 +535,9 @@ class Chess:
 
 # c = Chess(setup = "default")
 c = Chess()
-# print(c.board['f']['5'])
-# c.add_piece(Piece("B", "w", True, 'f1'))
+c.add_piece(Piece("K", "w", True, 'e4'))
+print(c.active_white[0].valid_squares())
+c.print_valid(Square("e4"))
 # c.print_valid(Square('f1'))
 # c.add_piece(Piece("Q", "b", True, 'd8'))
 # c.add_piece(Piece("P", "w", True, 'a2'))
@@ -479,4 +547,4 @@ c = Chess()
 # c.move("Nd3->c5")
 # c.move("Qd1->d3")
 # c.move("Pa2->a4")
-c.print()
+# c.print()
