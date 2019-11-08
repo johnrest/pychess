@@ -1,4 +1,5 @@
 # Pychess
+from itertools import chain
 from collections import Counter
 import sys
 
@@ -53,6 +54,7 @@ class Piece:
         self.color = color
         self.state = state
         self.square = Square(square)
+        self.valid_squares = self.compute_valid_squares()
 
     def __str__(self):
         if (self.name is not None) and (self.color is not None):
@@ -65,11 +67,12 @@ class Piece:
 
     def change_square(self, new_square):
         self.square = new_square
+        self.valid_squares = self.compute_valid_squares()       # Update new valid individual squares
 
-    def valid_squares(self):
+    def compute_valid_squares(self):
         """
         Compute all valid squares for the current piece as if it were alone in the board.
-        :return: List of Positions objects
+        :return: Dictionary with directions and valid squares
         """
         types = {'R': Piece.valid_rook, 'B': Piece.valid_bishop, 'N': Piece.valid_knight,
                  'Q': Piece.valid_queen, 'K': Piece.valid_king, 'P': Piece.valid_pawn}
@@ -77,8 +80,9 @@ class Piece:
         def select_function(function, piece):
             return function(piece)
 
-        squares = select_function(types.get(self.name), self)
-        return squares
+        valid_squares = select_function(types.get(self.name), self)
+
+        return valid_squares
 
     @staticmethod
     def sort_valid_squares(square, valid, valid_sorted):
@@ -99,19 +103,18 @@ class Piece:
             x, y = v.to_int_grid()
             dx = int((x - x1) / abs(x - x1)) if abs(x - x1) > 0 else 0
             dy = int((y - y1) / abs(y - y1)) if abs(y - y1) > 0 else 0
-            valid_sorted[(dx, dy)].append(v)                    # Populate dictionary
+            valid_sorted[(dx, dy)].append(v)  # Populate dictionary
 
         # Sort valid squares with respect to the current square
         for direction, valid in valid_sorted.items():
-            if direction[0] < 0:                                # "negative directions" have inverse sorting
+            if direction[0] < 0:  # "negative directions" have inverse sorting
                 reverse = True
-            elif (direction[0] == 0) and (direction[1] < 0):    # "negative directions" have inverse sorting
+            elif (direction[0] == 0) and (direction[1] < 0):  # "negative directions" have inverse sorting
                 reverse = True
             else:
                 reverse = False
 
             valid_sorted[direction] = sorted(valid_sorted[direction], reverse=reverse)
-
 
     @staticmethod
     def valid_rook(piece):
@@ -162,7 +165,7 @@ class Piece:
 
         valid = [Square(coord) for coord in coordinates]
 
-        valid_sorted = {(0, 0): valid}               # Knight moves are not sorted
+        valid_sorted = {(0, 0): valid}  # Knight moves are not sorted
 
         return valid_sorted
 
@@ -277,7 +280,7 @@ class Chess:
         self.active_white, self.dead_white = Chess.check_active(self.active_white, self.dead_white)
         self.active_black, self.dead_black = Chess.check_active(self.active_black, self.dead_black)
 
-        assert self._test_valid_active(), "Invalid pieces"
+        assert self._test_active(), "Invalid pieces"
 
     def print(self):
         """
@@ -303,6 +306,7 @@ class Chess:
             board_string += "|\n" + line
 
         print(board_string)
+        # TODO: improve the quality of the printing, add color and coordinates
 
     def print_valid(self, square):
         """
@@ -328,12 +332,11 @@ class Chess:
             row = int(piece.square.rank) - 1
             board[row][col] = piece.name + piece.color
 
-        for _, valid in selected_piece.valid_squares().items():
-            for sq in valid:
-                col, row = sq.to_int_grid()
-                # col = ord(sq.file) - ord('a')
-                # row = int(sq.rank) - 1
-                board[row][col] = "++"
+        for sq in list(chain(*selected_piece.valid_squares.values())):
+            col, row = sq.to_int_grid()
+            # col = ord(sq.file) - ord('a')
+            # row = int(sq.rank) - 1
+            board[row][col] = "++"
 
         line = " " + "-- " * 8 + "\n"
         board_string = line
@@ -346,6 +349,7 @@ class Chess:
             board_string += "|\n" + line
 
         print(board_string)
+        # TODO: correctly print updated valid moves
 
     def game_score(self):
         """
@@ -399,105 +403,55 @@ class Chess:
         return current_square, future_square
 
     def move(self, entry):
-
+        """
+        Move a piece for the current player according to a user entry
+        :param entry: string with the designed format
+        :return: None
+        """
         current_square, future_square = self.parse_move(entry)
 
         # Obtain active player pieces
         active = self.get_active(self.current_player)
 
+        # This works as only one active piece can be in a square at the same time
         [current_piece] = [piece for piece in active if piece.square == current_square]
 
-        valid = current_piece.valid_squares()
+        # Update valid squares considering all pieces in the board
+        self.update_valid_squares(current_piece)
 
-        if future_square in valid:
+        if future_square in list(chain(*current_piece.valid_squares.values())):
             current_piece.change_square(future_square)
         else:
-            print("Move is invalid!")
+            assert False, "Move is invalid!"
 
         self.active_white, self.dead_white = Chess.check_active(self.active_white, self.dead_white)
         self.active_black, self.dead_black = Chess.check_active(self.active_black, self.dead_black)
 
-        assert self._test_valid_active(), "Invalid pieces"
+        assert self._test_active(), "Invalid pieces"
 
         self.switch_current_player()
+        self.update_valid_squares(current_piece)
 
-    # def move(self, entry):
-    #
-    # current_active = []
-    #     if self.current_player == 'w':
-    #         current_active = self.active_white
-    #     elif self.current_player == 'b':
-    #         current_active = self.active_black
-    #
-    #     # Pawns move
-    #     selected_pieces = []  # Select possible pieces to move
-    #     if len(entry) == 2:
-    #         for piece in current_active:
-    #             if (piece.name == 'P') and (piece.square.file == entry[0]):
-    #                 selected_pieces.append(piece)
-    #
-    #     if len(selected_pieces) == 1:
-    #         if selected_pieces[0].square.rank in ['2', '7']:
-    #             if (self.current_player == 'w') and (0 < ord(entry[1]) - ord(selected_pieces[0].square.rank) < 3):
-    #                 selected_pieces[0].square = Square(entry)
-    #             elif (self.current_player == 'b') and (0 < ord(selected_pieces[0].square.rank) - ord(entry[1]) < 3):
-    #                 selected_pieces[0].square = Square(entry)
-    #             else:
-    #                 print("Invalid position")
-    #                 exit()
-    #         else:
-    #             if (self.current_player == 'w') and (ord(entry[1]) - ord(selected_pieces[0].square.rank) == 1):
-    #                 selected_pieces[0].square = Square(entry)
-    #             elif (self.current_player == 'b') and (ord(selected_pieces[0].square.rank) - ord(entry[1]) == 1):
-    #                 selected_pieces[0].square = Square(entry)
-    #             else:
-    #                 print("Invalid position")
-    #                 exit()
+    def update_valid_squares(self, moving_piece):
+        # Create new dictionary to populate with updated squares
+        updated_valid_squares = {direction: [] for direction in moving_piece.valid_squares.keys()}
 
-    #
-    # selected_pieces = []  # Select possible pieces to move
-    # for piece in current_active:
-    #     if entry[0] == piece.name:
-    #         selected_pieces.append(piece)
-    #
-    # new_position = entry[1:]
-    # if len(selected_pieces) == 1:
-    # Rooks
-    # if (selected_pieces[0].position[0] == new_position[0]) or (
-    #         selected_pieces[0].position[1] == new_position[1]):
-    #     selected_pieces[0].position = new_position
-    # else:
-    #     print("Invalid position!")
-    #     exit()
+        all_active = self.active_white + self.active_black
+        all_squares = [piece.square for piece in all_active]
 
-    # Bishops
-    # if abs(ord(selected_pieces[0].position[0]) - ord(new_position[0])) == abs(
-    #         ord(selected_pieces[0].position[1]) - ord(new_position[1])):
-    #     selected_pieces[0].position = new_position
-    # else:
-    #     print("Invalid position!")
-    #     exit()
+        for direction, squares in moving_piece.valid_squares.items():
+            for square in squares:
+                if square in all_squares:
+                    if moving_piece.name in ["K", "N"]:  # Kings and Knights do not have cut trajectories
+                        pass
+                    elif moving_piece.name in ["Q", "B", "R", "P"]:  # Cut trajectories for other pieces
+                        break  # stop appending after finding a blocking piece
+                else:
+                    updated_valid_squares[direction].append(square)
 
-    # Knights
-    # if (abs(ord(selected_pieces[0].position[0]) - ord(new_position[0])) == 2) and (abs(ord(selected_pieces[0].position[1]) - ord(new_position[1])) == 1):
-    #     selected_pieces[0].position = new_position
-    # elif (abs(ord(selected_pieces[0].position[0]) - ord(new_position[0])) == 1) and (abs(ord(selected_pieces[0].position[1]) - ord(new_position[1])) == 2):
-    #     selected_pieces[0].position = new_position
-    # else:
-    #     print("Invalid position")
-    #     exit()
+        moving_piece.valid_squares = updated_valid_squares
 
-    # Queens
-    # if (selected_pieces[0].position[0] == new_position[0]) or (
-    #         selected_pieces[0].position[1] == new_position[1]) or (
-    #         abs(ord(selected_pieces[0].position[0]) - ord(new_position[0])) == abs(
-    #         ord(selected_pieces[0].position[1]) - ord(new_position[1]))):
-    #     selected_pieces[0].position = new_position
-    # else:
-    #     print("Invalid position!")
-    #     exit()
-
-    def _test_valid_active(self):
+    def _test_active(self):
         """
         Test that no two valid pieces have the same square
         :return: True or False
@@ -535,9 +489,24 @@ class Chess:
 
 # c = Chess(setup = "default")
 c = Chess()
-c.add_piece(Piece("K", "w", True, 'e4'))
-print(c.active_white[0].valid_squares())
-c.print_valid(Square("e4"))
+c.add_piece(Piece("R", "w", True, 'b1'))
+c.add_piece(Piece("P", "w", True, 'a2'))
+c.add_piece(Piece("P", "w", True, 'b2'))
+c.add_piece(Piece("P", "w", True, 'c2'))
+c.add_piece(Piece("N", "b", True, 'd6'))
+c.print()
+c.move("Rb1->a1")
+c.move("Nd6->c4")
+c.move("Pa2->a4")
+c.move("Nc4->a3")
+c.move("Pb2->b4")
+c.print_valid(Square("a1"))
+
+# print(c.active_white[0].valid_squares)
+# c.print_valid(Square("e4"))
+# c.update_valid_squares(c.active_white[0])
+# print(c.active_white[0].valid_squares)
+# c.print_valid(Square("e4"))
 # c.print_valid(Square('f1'))
 # c.add_piece(Piece("Q", "b", True, 'd8'))
 # c.add_piece(Piece("P", "w", True, 'a2'))
