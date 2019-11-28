@@ -1,11 +1,83 @@
 # Pychess
+import os
 from itertools import chain
 from collections import Counter
 import sys
+import pygame
+
+# Initialize modules from pygame
+pygame.init()
 
 # Global variables
 FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
 RANKS = ['1', '2', '3', '4', '5', '6', '7', '8']
+
+from pygame.locals import (
+    RLEACCEL,
+    MOUSEBUTTONDOWN,
+    MOUSEBUTTONUP,
+    MOUSEMOTION
+)
+
+# Drawing window
+SCREEN_WIDTH, SCREEN_HEIGHT = 640, 640
+SQUARE_SIZE = 80
+
+# Assets
+ASSETS_FOLDER = "../assets"
+BOARD_FILE = os.path.join(ASSETS_FOLDER, "board.png")
+
+
+class BoardSprite(pygame.sprite.Sprite):
+    """
+    Class to handle the board an all background objects in the game
+    """
+
+    def __init__(self):
+        super(BoardSprite, self).__init__()
+        self.surf = pygame.image.load(BOARD_FILE)
+        self.rect = self.surf.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2))
+
+
+class PieceSprite(pygame.sprite.Sprite):
+    """
+    Sprite for game pieces
+    """
+
+    def __init__(self, file=None, rank=None, name=None):
+        super(PieceSprite, self).__init__()
+        self.surf = pygame.image.load(os.path.join(ASSETS_FOLDER, name + ".png"))
+        self.surf.set_colorkey((255, 255, 255), RLEACCEL)
+
+        self.file, self.rank = 0, 0
+        self.x, self.y = 0, 0
+        self.rect = []
+
+        self.set_square(file, rank)
+
+        self.dragging = False
+
+    def set_square(self, file, rank):
+        self.file, self.rank = file, rank  # Integer values from [0,7]
+        self.chess_to_screen(square_size=SQUARE_SIZE)  # real center positions on screen coordinates
+        self.rect = self.surf.get_rect(center=(self.x, self.y))
+
+    def set_xy(self, x, y):
+        self.x, self.y = x, y
+        self.screen_to_chess(square_size=SQUARE_SIZE)
+        self.rect = self.surf.get_rect(center=(self.x, self.y))
+
+    def chess_to_screen(self, square_size=SQUARE_SIZE):
+        """Conversion of chess coordinates to screen coordinates"""
+        board_size = 8 * square_size
+        self.x = SCREEN_WIDTH / 2 - board_size / 2 + square_size / 2 + self.file * square_size
+        self.y = SCREEN_HEIGHT / 2 + board_size / 2 - square_size / 2 - self.rank * square_size
+
+    def screen_to_chess(self, square_size=SQUARE_SIZE):
+        """Conversion from screen coordinates to chess coordinates"""
+        board_size = 8 * square_size
+        self.file = round((self.x - SCREEN_WIDTH / 2 + board_size / 2 - square_size / 2) / square_size)
+        self.rank = round((-self.y + SCREEN_HEIGHT / 2 + board_size / 2 - square_size / 2) / square_size)
 
 
 class Square:
@@ -54,7 +126,9 @@ class Piece:
         self.color = color
         self.state = state
         self.square = Square(square)
-        self.valid_squares = self.compute_valid_squares()
+        self.valid_squares = []
+        x, y = self.square.to_int_grid()
+        self.sprite = PieceSprite(x, y, self.name + self.color)
 
     def __str__(self):
         if (self.name is not None) and (self.color is not None):
@@ -67,7 +141,7 @@ class Piece:
 
     def change_square(self, new_square):
         self.square = new_square
-        self.valid_squares = self.compute_valid_squares()       # Update new valid individual squares
+        self.compute_valid_squares()  # Update new valid individual squares
 
     def compute_valid_squares(self):
         """
@@ -80,9 +154,7 @@ class Piece:
         def select_function(function, piece):
             return function(piece)
 
-        valid_squares = select_function(types.get(self.name), self)
-
-        return valid_squares
+        self.valid_squares = select_function(types.get(self.name), self)
 
     @staticmethod
     def sort_valid_squares(square, valid, valid_sorted):
@@ -235,36 +307,8 @@ class Chess:
         self.score = 0
 
         if setup.lower() == 'default':  # Full chess game
-            # Pawns
-            for file in FILES:
-                self.active_white.append(Piece('P', 'w', True, file + '2'))
-                self.active_black.append(Piece('P', 'b', True, file + '7'))
-
-            # Rooks
-            self.active_white.append(Piece('R', 'w', True, 'a1'))
-            self.active_white.append(Piece('R', 'w', True, 'h1'))
-            self.active_black.append(Piece('R', 'b', True, 'a8'))
-            self.active_black.append(Piece('R', 'b', True, 'h8'))
-
-            # Knights
-            self.active_white.append(Piece('N', 'w', True, 'b1'))
-            self.active_white.append(Piece('N', 'w', True, 'g1'))
-            self.active_black.append(Piece('N', 'b', True, 'b8'))
-            self.active_black.append(Piece('N', 'b', True, 'g8'))
-
-            # Bishops
-            self.active_white.append(Piece('B', 'w', True, 'c1'))
-            self.active_white.append(Piece('B', 'w', True, 'f1'))
-            self.active_black.append(Piece('B', 'b', True, 'c8'))
-            self.active_black.append(Piece('B', 'b', True, 'f8'))
-
-            # Queens
-            self.active_white.append(Piece('Q', 'w', True, 'd1'))
-            self.active_black.append(Piece('Q', 'b', True, 'd8'))
-
-            # Kings
-            self.active_white.append(Piece('K', 'w', True, 'e1'))
-            self.active_black.append(Piece('K', 'b', True, 'e8'))
+            pass
+            # TODO: rewrite full chess initial setup
 
     def add_piece(self, piece):
         """
@@ -321,9 +365,10 @@ class Chess:
             if piece.square == square:
                 selected_piece = piece
 
-        if selected_piece is None:
-            print("No piece in the selected square")
-            exit()
+        assert selected_piece is not None, "No valid piece in the selected square"
+
+        # Update valid squares considering all pieces in the board
+        self.update_all_valid_squares()
 
         board = [["" for _ in range(8)] for __ in range(8)]
 
@@ -417,7 +462,7 @@ class Chess:
         [current_piece] = [piece for piece in active if piece.square == current_square]
 
         # Update valid squares considering all pieces in the board
-        self.update_valid_squares(current_piece)
+        self.update_all_valid_squares()
 
         if future_square in list(chain(*current_piece.valid_squares.values())):
             current_piece.change_square(future_square)
@@ -429,27 +474,38 @@ class Chess:
 
         assert self._test_active(), "Invalid pieces"
 
-        self.switch_current_player()
-        self.update_valid_squares(current_piece)
+        self.switch_current_player()  # change square of moved piece and compute new valid moves
+        self.update_all_valid_squares()  # Update valid moves with new board positions
 
-    def update_valid_squares(self, moving_piece):
-        # Create new dictionary to populate with updated squares
-        updated_valid_squares = {direction: [] for direction in moving_piece.valid_squares.keys()}
+    def update_all_valid_squares(self):
+        """
+        Update all active pieces valid squares, update the member Piece.valid_pieces dictionary
+        :return: None
+        """
 
         all_active = self.active_white + self.active_black
-        all_squares = [piece.square for piece in all_active]
 
-        for direction, squares in moving_piece.valid_squares.items():
-            for square in squares:
-                if square in all_squares:
-                    if moving_piece.name in ["K", "N"]:  # Kings and Knights do not have cut trajectories
-                        pass
-                    elif moving_piece.name in ["Q", "B", "R", "P"]:  # Cut trajectories for other pieces
-                        break  # stop appending after finding a blocking piece
-                else:
-                    updated_valid_squares[direction].append(square)
+        occupied_squares = [piece.square for piece in all_active]
 
-        moving_piece.valid_squares = updated_valid_squares
+        for current_piece in all_active:  # Update to all pieces
+
+            # Compute individual valid pieces
+            current_piece.compute_valid_squares()
+
+            # Create new dictionary to populate with updated squares
+            updated_valid_squares = {direction: [] for direction in current_piece.valid_squares.keys()}
+
+            for direction, squares in current_piece.valid_squares.items():
+                for square in squares:
+                    if square in occupied_squares:
+                        if current_piece.name in ["K", "N"]:  # Kings and Knights do not have obstructed trajectories
+                            pass
+                        elif current_piece.name in ["Q", "B", "R", "P"]:  # Cut trajectories for other pieces
+                            break  # stop appending after finding a blocking piece
+                    else:
+                        updated_valid_squares[direction].append(square)
+
+            current_piece.valid_squares = updated_valid_squares
 
     def _test_active(self):
         """
@@ -486,34 +542,69 @@ class Chess:
                 new_active.append(piece)
         return new_active, dead
 
+    def game(self):
+        """
+        Method to start the game
+        :return: None
+        """
 
-# c = Chess(setup = "default")
-c = Chess()
-c.add_piece(Piece("R", "w", True, 'b1'))
-c.add_piece(Piece("P", "w", True, 'a2'))
-c.add_piece(Piece("P", "w", True, 'b2'))
-c.add_piece(Piece("P", "w", True, 'c2'))
-c.add_piece(Piece("N", "b", True, 'd6'))
-c.print()
-c.move("Rb1->a1")
-c.move("Nd6->c4")
-c.move("Pa2->a4")
-c.move("Nc4->a3")
-c.move("Pb2->b4")
-c.print_valid(Square("a1"))
+        screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
 
-# print(c.active_white[0].valid_squares)
-# c.print_valid(Square("e4"))
-# c.update_valid_squares(c.active_white[0])
-# print(c.active_white[0].valid_squares)
-# c.print_valid(Square("e4"))
-# c.print_valid(Square('f1'))
-# c.add_piece(Piece("Q", "b", True, 'd8'))
-# c.add_piece(Piece("P", "w", True, 'a2'))
-# c.print()
-# c.move("Ne5->d3")
-# c.move("Qd8->d1")
-# c.move("Nd3->c5")
-# c.move("Qd1->d3")
-# c.move("Pa2->a4")
-# c.print()
+        static_sprites = pygame.sprite.Group()
+        board = BoardSprite()
+        static_sprites.add(board)
+
+        self.add_piece(Piece("R", "w", True, 'd1'))
+        self.add_piece(Piece("R", "w", True, 'd2'))
+        self.add_piece(Piece("R", "w", True, 'd3'))
+        self.add_piece(Piece("R", "w", True, 'd4'))
+        self.add_piece(Piece("P", "b", True, 'a8'))
+
+        piece_sprites = pygame.sprite.Group()
+        all_active = self.active_white + self.active_black
+
+        for piece in all_active:
+            piece_sprites.add(piece.sprite)
+
+        running = True
+
+        while running:
+            # Did the user click the window close button?
+            for event in pygame.event.get():
+
+                if event.type == pygame.QUIT:
+                    running = False
+
+            # Draw all static sprites
+            for sprite in static_sprites:
+                screen.blit(sprite.surf, sprite.rect)
+
+            # Draw all piece sprites
+            for sprite in piece_sprites:
+                screen.blit(sprite.surf, sprite.rect)
+
+            # Flip the display
+            pygame.display.flip()
+
+        # Done! Time to quit.
+        pygame.quit()
+
+
+if __name__ == '__main__':
+    c = Chess()
+    c.game()
+
+    # c = Chess(setup = "default")
+    # c = Chess()
+    # c.add_piece(Piece("R", "w", True, 'd1'))
+    # c.add_piece(Piece("N", "b", True, 'd6'))
+    # c.add_piece(Piece("P", "w", True, 'c2'))
+    #
+    # c.print()
+    # c.move("Rd1->c1")  # w
+    # c.move("Nd6->e4")  # b
+    # c.move("Pc2->c4")  # w
+    # c.move("Ne4->d2")  # b
+    # c.print_valid(Square("c1"))
+    # print(c.active_white[0].valid_squares)
+    print("Done, goodbye")
