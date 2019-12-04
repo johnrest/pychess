@@ -1,12 +1,13 @@
 # File to store all global variables
-import os
 
-from pygame.locals import (
-    RLEACCEL,
-    MOUSEBUTTONDOWN,
-    MOUSEBUTTONUP,
-    MOUSEMOTION
-)
+from src import *
+
+# from pygame.locals import (
+#     RLEACCEL,
+#     MOUSEBUTTONDOWN,
+#     MOUSEBUTTONUP,
+#     MOUSEMOTION
+# )
 
 # Drawing window
 SCREEN_WIDTH, SCREEN_HEIGHT = 640, 640
